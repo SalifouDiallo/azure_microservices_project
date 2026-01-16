@@ -1,0 +1,228 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+pool: "default"
+
+variables:
+  # Resource group ainsi que l'acronyme utiliser pour créer le nom des resources
+- name: RG
+  value: 'sifaxrg'
+
+- name: AzureSubscription
+  value: 'Azure subscription 1(15ae0360-119f-45ae-86b7-2b3caf02eea8)'
+
+
+  # Resources
+- name: RG_Location
+  value: 'eastus'
+- name: clusterName
+  value: '$(RG)kube'
+- name: dnsPrefix
+  value: '$(RG)kube'
+- name: agentCount
+  value: 3
+- name: agentVMSize
+  value: "standard_d2s_v3"
+- name: linuxAdminUsername
+  value: "kubeadmin"
+- name: sshRSAPublicKey
+
+- name: InfrastructureFolder
+  value: 'DeployKube'
+
+- name: AppConfigEndpoint # Ont pourrait apporter la variable du premier pipeline ...
+  value: 'https://sifaxrgappconfiguration.azconfig.io'  
+steps:
+  - task: AzureCLI@2
+    displayName: Create SSH Key for Kube
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      scriptType: 'ps'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        # Check if the SSH key exists
+        $keyExists = $(az sshkey list --resource-group $(RG) --query "[?name=='KubeSSHKey'] | length(@)" -o tsv)
+
+        if ($keyExists -eq 0) {
+          # Key doesn't exist, so create it
+          az sshkey create --name "KubeSSHKey" --resource-group $(RG)
+          Write-Host "SSH key 'KubeSSHKey' created successfully."
+        } else {
+          Write-Host "SSH key 'KubeSSHKey' already exists."
+        }
+
+        # Fetch the public key
+        $key = $(az sshkey show --name "KubeSSHKey" --resource-group $(RG) --query "publicKey" -o tsv)
+
+        # Output the public key
+        Write-Host $key
+        Write-Host "##vso[task.setvariable variable=sshRSAPublicKey]$key"
+
+  - script: |
+      echo "clusterName: $(clusterName)"
+      echo "location: $(RG_Location)"
+      echo "dnsPrefix: $(dnsPrefix)"
+      echo "agentCount: $(agentCount)"
+      echo "agentVMSize: $(agentVMsize)"
+      echo "linuxAdminUsername: $(linuxAdminUsername)"
+      echo "sshRSAPublicKey: $(sshRSAPublicKey)"
+    displayName: "Debug Parameter Values"
+
+  - task: AzureResourceManagerTemplateDeployment@3
+    displayName: ARM Deployment Kube Cluster
+    inputs:
+      deploymentScope: 'Resource Group'
+      azureResourceManagerConnection: $(AzureSubscription)
+      action: 'Create Or Update Resource Group'
+      resourceGroupName: '$(RG)'
+      location: '$(RG_Location)'
+      templateLocation: 'Linked artifact'
+      csmFile: '$(Build.SourcesDirectory)\$(InfrastructureFolder)\azuredeploy.json'
+      csmParametersFile: '$(Build.SourcesDirectory)\$(InfrastructureFolder)\azuredeploy.parameters.json'
+      overrideParameters: '-clusterName $(clusterName) -location $(RG_Location) -dnsPrefix $(dnsPrefix) -agentCount $(agentCount) -agentVMSize $(agentVMsize)'
+      deploymentMode: 'Incremental'
+      deploymentOutputs: 'Deployment1'
+
+  - task: AzureKeyVault@2
+    displayName: 'Reading Secrets'
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      KeyVaultName: 'sifaxrgKeyVault'
+      SecretsFilter: 'ClientID,TenantID,ClientSecret,ConnectionStringEventHub,ConnectionStringSB,ConnectionStringBlob'
+      RunAsPreJob: false
+
+  - task: AzureCLI@2
+    displayName: Create Kube Secrets
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      scriptType: 'ps' # Use PowerShell
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        # Login to Azure CLI (this happens automatically with the AzureSubscription connection)
+        echo "Logged in to Azure CLI."
+
+        # Ensure kubectl is installed and connected to the cluster
+        az aks get-credentials --resource-group $(RG) --name $(clusterName) --overwrite-existing
+
+        # Retrieve secrets from Azure App Configuration
+        $ServiceBusImageQueueName = az appconfig kv show --name sifaxrgappconfiguration --key "ApplicationConfiguration:ServiceBusQueue1Name" --query "value" -o tsv
+        $ServiceBusContentQueueName = az appconfig kv show --name sifaxrgappconfiguration --key "ApplicationConfiguration:ServiceBusQueue2Name" --query "value" -o tsv
+        $EventHubName = az appconfig kv show --name sifaxrgappconfiguration --key "ApplicationConfiguration:EventHubName" --query "value" -o tsv
+        $SynchroBlob = az appconfig kv show --name sifaxrgappconfiguration --key "ApplicationConfiguration:SynchroBlob" --query "value" -o tsv
+        # Ensure that retrieved values are not empty
+        if (-not $ServiceBusImageQueueName) {
+            Write-Host "Error: ServiceBusImageQueueName is empty."
+            exit 1
+        }
+        if (-not $ServiceBusContentQueueName) {
+            Write-Host "Error: ServiceBusContentQueueName is empty."
+            exit 1
+        }
+        if (-not $EventHubName) {
+            Write-Host "Error: EventHubName is empty."
+            exit 1
+        }
+        # Create Kubernetes secrets
+        kubectl create secret generic my-secret `
+          --from-literal=AppConfigurationEndpoints="$(AppConfigEndpoint)" `
+          --from-literal=AZURE_CLIENT_ID="$(ClientID)" `
+          --from-literal=AZURE_TENANT_ID="$(TenantID)" `
+          --from-literal=AZURE_CLIENT_SECRET="$(ClientSecret)" `
+          --from-literal=AZURE_SERVICE_BUS="$(ConnectionStringSB)" `
+          --from-literal=AZURE_EVENT_HUB="$(ConnectionStringEventHub)" `
+          --from-literal=ServiceBusImageQueueName="$ServiceBusImageQueueName" `
+          --from-literal=ServiceBusContentQueueName="$ServiceBusContentQueueName" `
+          --from-literal=SynchroBlob="$SynchroBlob" `
+          --from-literal=ConnectionStringBlob="$(ConnectionStringBlob)" `
+          --from-literal=EventHubName="$EventHubName"
+
+        echo "Secrets created successfully!"
+
+
+
+
+  - task: AzureCLI@2
+    displayName: Deploy YAML to Kubernetes Cluster
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      scriptType: 'ps' # Use PowerShell
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        echo "Deploying YAML to Kubernetes cluster."
+
+        #Ensure kubectl is installed and connected to the cluster
+        az aks get-credentials --resource-group $(RG) --name $(clusterName) --overwrite-existing
+
+        #Apply your deployment YAML file
+        kubectl apply --validate=false -f $(Build.SourcesDirectory)\$(InfrastructureFolder)\Cluster.yml
+
+        echo "YAML file deployed successfully!"
+
+
+  - task: AzureCLI@2
+    displayName: Update App Registration RedirectUris
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      scriptType: 'ps'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        az ad app show --id $(ClientID)
+
+        $retryCount = 0
+        $maxRetries = 20
+        $waitTime   = 35
+        $publicIP   = ""
+
+        do {
+          Write-Host "Checking if Public IP is available..."
+          $publicIP = kubectl get service mvc-service -o jsonpath="{.status.loadBalancer.ingress[0].ip}" 2>$null
+
+          if ([string]::IsNullOrWhiteSpace($publicIP)) {
+            Write-Host "Public IP is empty, retrying in $waitTime seconds..."
+            Start-Sleep -Seconds $waitTime
+          }
+          else {
+            Write-Host "Public IP found: $publicIP"
+          }
+
+          $retryCount++
+        } while ([string]::IsNullOrWhiteSpace($publicIP) -and $retryCount -lt $maxRetries)
+
+        if ([string]::IsNullOrWhiteSpace($publicIP)) {
+          Write-Error "Public IP is still empty after $maxRetries retries. Exiting..."
+          exit 1
+        }
+
+        # Construction avec opérateur +
+        $redirectUri1 = "https://" + $publicIP + ":8081"
+        $redirectUri2 = "https://" + $publicIP + ":8081/signin-oidc"
+
+        Write-Host "Redirect URI 1: $redirectUri1"
+        Write-Host "Redirect URI 2: $redirectUri2"
+
+        az ad app update --id "$(ClientID)" --web-redirect-uris "$redirectUri1" "$redirectUri2"
+
+        Write-Host " Redirect URIs updated successfully!"
+
+  - task: AzureCLI@2
+    displayName: 'Apply KEDA ScaledObject YAML'
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      scriptType: 'ps' # Utiliser PowerShell
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        # Appliquer le fichier YAML de KEDA ScaledObject
+        kubectl apply --validate=false -f $(Build.SourcesDirectory)\DeployKube\keda-scaledobject.yml
+
+        echo "KEDA ScaledObject YAML appliqué avec succès!"
+    env:
+      ServiceBusContentQueueName: $ServiceBusContentQueueName
+      ServiceBusImageQueueName: $ServiceBusImageQueueName
+      EventHubName: $(EventHubName)
+      AZURE_SERVICE_BUS: "$(ConnectionStringSB)"
+      AZURE_EVENT_HUB: "$(ConnectionStringEventHub)"

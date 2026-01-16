@@ -1,0 +1,331 @@
+﻿# Déploiement de l'API
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-deployment  # Nom du déploiement pour l'API
+spec:
+  replicas: 1  # Nombre de réplicas souhaité pour l'API
+  selector:
+    matchLabels:
+      app: api  # Sélecteur pour identifier les pods de l'API
+  template:
+    metadata:
+      labels:
+        app: api  # Étiquettes associées au template de pod
+    spec:
+      containers:
+        - name: api  # Nom du conteneur pour l'API
+          image: sifaxrgregistry.azurecr.io/api:latest  # Image du conteneur
+          ports:
+            - containerPort: 8080  # Port d'exposition du conteneur
+          resources:
+            requests:
+              cpu: "100m"  # Demande initiale en CPU pour le conteneur
+            limits:
+              cpu: "500m"  # Limite maximale de CPU pour le conteneur
+          env:
+            - name: AppConfigurationEndpoints  # Variable d'environnement pour les endpoints de configuration
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret  # Référence au secret Kubernetes
+                  key: AppConfigurationEndpoints  # Clé dans le secret
+            # Autres variables d'environnement pour les identifiants Azure
+            - name: AZURE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_CLIENT_ID
+            - name: AZURE_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_TENANT_ID
+            - name: AZURE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_CLIENT_SECRET
+
+---
+
+# Autoscaling Horizontal pour l'API
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-deployment-hpa  # Nom de l'autoscaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1  # Type de ressource à scaler
+    kind: Deployment
+    name: api-deployment  # Nom du déploiement à scaler
+  minReplicas: 1  # Nombre minimum de réplicas
+  maxReplicas: 3  # Nombre maximum de réplicas
+  metrics:
+    - type: Resource  # Type de métrique pour l'autoscaling
+      resource:
+        name: cpu  # Utilisation du CPU comme métrique de scaling
+        target:
+          type: Utilization
+          averageUtilization: 50  # Cible d'utilisation moyenne du CPU à 50%
+
+---
+
+# Déploiement pour l'application MVC
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mvc-deployment  # Nom du déploiement pour l'application MVC
+spec:
+  replicas: 1  # Nombre de réplicas souhaité pour l'application MVC
+  selector:
+    matchLabels:
+      app: mvc  # Sélecteur pour identifier les pods de l'application MVC
+  template:
+    metadata:
+      labels:
+        app: mvc  # Étiquettes associées au template de pod
+    spec:
+      containers:
+        - name: mvc  # Nom du conteneur pour l'application MVC
+          image: sifaxrgregistry.azurecr.io/mvc:latest  # Image du conteneur
+          ports:
+            - containerPort: 8081  # Port d'exposition du conteneur
+          resources:
+            requests:
+              cpu: "100m"  # Demande initiale en CPU pour le conteneur
+            limits:
+              cpu: "500m"  # Limite maximale de CPU pour le conteneur
+          env:
+            - name: AppConfigurationEndpoints
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AppConfigurationEndpoints
+            - name: AZURE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_CLIENT_ID
+            - name: AZURE_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_TENANT_ID
+            - name: AZURE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_CLIENT_SECRET
+
+---
+
+# Autoscaling Horizontal pour l'application MVC
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mvc-deployment-hpa  # Nom de l'autoscaler pour MVC
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mvc-deployment  # Nom du déploiement à scaler
+  minReplicas: 1  # Nombre minimum de réplicas
+  maxReplicas: 3  # Nombre maximum de réplicas
+  metrics:
+    - type: Resource  # Type de métrique pour l'autoscaling
+      resource:
+        name: cpu  # Utilisation du CPU comme métrique de scaling
+        target:
+          type: Utilization
+          averageUtilization: 50  # Cible d'utilisation moyenne du CPU à 50%
+
+---
+
+# Déploiement pour le Worker de contenu
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-content-deployment  # Nom du déploiement pour le worker de contenu
+spec:
+  replicas: 1  # Nombre de réplicas souhaité pour le worker de contenu
+  selector:
+    matchLabels:
+      app: worker-content  # Sélecteur pour identifier les pods du worker de contenu
+  template:
+    metadata:
+      labels:
+        app: worker-content  # Étiquettes associées au template de pod
+    spec:
+      containers:
+        - name: worker-content  # Nom du conteneur pour le worker de contenu
+          image: sifaxrgregistry.azurecr.io/worker_content:latest  # Image du conteneur
+          env:
+            - name: AppConfigurationEndpoints
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AppConfigurationEndpoints
+            - name: AZURE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_CLIENT_ID
+            - name: AZURE_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_TENANT_ID
+            - name: AZURE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_CLIENT_SECRET
+            - name: AZURE_SERVICE_BUS
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_SERVICE_BUS
+            - name: ServiceBusContentQueueName
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: ServiceBusContentQueueName
+
+---
+
+# Déploiement pour le Worker de base de données
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-db-deployment  # Nom du déploiement pour le worker de base de données
+spec:
+  replicas: 1  # Nombre de réplicas souhaité pour le worker de base de données
+  selector:
+    matchLabels:
+      app: worker-db  # Sélecteur pour identifier les pods du worker de base de données
+  template:
+    metadata:
+      labels:
+        app: worker-db  # Étiquettes associées au template de pod
+    spec:
+      containers:
+        - name: worker-db  # Nom du conteneur pour le worker de base de données
+          image: sifaxrgregistry.azurecr.io/worker_db:latest  # Image du conteneur
+          env:
+            - name: AppConfigurationEndpoints
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AppConfigurationEndpoints
+            - name: AZURE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_CLIENT_ID
+            - name: AZURE_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_TENANT_ID
+            - name: AZURE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_CLIENT_SECRET
+            - name: AZURE_EVENT_HUB
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_EVENT_HUB
+            - name: EventHubName
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: EventHubName
+            - name: ConnectionStringBlob
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: ConnectionStringBlob
+
+---
+
+# Déploiement pour le Worker d'images
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-image-deployment  # Nom du déploiement pour le worker d'images
+spec:
+  replicas: 1  # Nombre de réplicas souhaité pour le worker d'images
+  selector:
+    matchLabels:
+      app: worker-image  # Sélecteur pour identifier les pods du worker d'images
+  template:
+    metadata:
+      labels:
+        app: worker-image  # Étiquettes associées au template de pod
+    spec:
+      containers:
+        - name: worker-image  # Nom du conteneur pour le worker d'images
+          image: sifaxrgregistry.azurecr.io/worker_image:latest  # Image du conteneur
+          env:
+            - name: AppConfigurationEndpoints
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AppConfigurationEndpoints
+            - name: AZURE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_CLIENT_ID
+            - name: AZURE_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_TENANT_ID
+            - name: AZURE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_CLIENT_SECRET
+            - name: AZURE_SERVICE_BUS
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: AZURE_SERVICE_BUS
+            - name: ServiceBusImageQueueName
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: ServiceBusImageQueueName
+
+---
+
+# Service LoadBalancer pour l'API
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-service  # Nom du service pour l'API
+spec:
+  type: LoadBalancer  # Type de service (LoadBalancer pour exposer le service publiquement)
+  ports:
+    - port: 8080  # Port d'exposition du service
+      targetPort: 8080  # Port ciblé dans le pod
+  selector:
+    app: api  # Sélecteur pour lier le service aux pods API
+
+---
+
+# Service LoadBalancer pour l'application MVC
+apiVersion: v1
+kind: Service
+metadata:
+  name: mvc-service  # Nom du service pour l'application MVC
+spec:
+  type: LoadBalancer  # Type de service (LoadBalancer pour exposer le service publiquement)
+  ports:
+    - port: 8081  # Port d'exposition du service
+      targetPort: 8081  # Port ciblé dans le pod
+  selector:
+    app: mvc  # Sélecteur pour lier le service aux pods MVC

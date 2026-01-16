@@ -1,0 +1,89 @@
+trigger:
+- main
+
+pool:
+  name: Default  # Utilisation de l'agent local par défaut
+
+variables:
+  AzureSubscription: 'Azure subscription 1(15ae0360-119f-45ae-86b7-2b3caf02eea8)'  # Nom de ta connexion de service
+  keyVaultName: 'sifaxrgKeyVault'  # Nom de ton Key Vault
+  resourceGroup: 'sifaxrg'  # Remplace par ton groupe de ressources
+  aksClusterName: 'sifaxrgkube'  # Remplace par ton nom de cluster AKS
+
+jobs:
+- job: TestPipeline
+  displayName: 'Test Pipeline for App Registration'
+  steps:
+
+  # Étape 1 : Lire les secrets depuis Azure Key Vault
+  - task: AzureKeyVault@2
+    displayName: 'Reading Secrets from Key Vault'
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      KeyVaultName: $(keyVaultName)
+      SecretsFilter: 'ClientID,TenantID,ClientSecret'
+      RunAsPreJob: false
+
+  # Étape 2 : Connexion au cluster Kubernetes
+  - task: AzureCLI@2
+    displayName: 'Login to Azure Kubernetes Service'
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        echo "Logging into Azure Kubernetes Service..."
+        az aks get-credentials --resource-group $(resourceGroup) --name $(aksClusterName)
+        echo "Logged into Azure Kubernetes Service successfully."
+
+  # Étape 3 : Récupérer l'IP publique via Kubernetes
+  - task: AzureCLI@2
+    displayName: 'Get Public IP from Kubernetes Service'
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        echo "Retrieving public IP from Kubernetes service..."
+        publicIP=$(kubectl get service mvc-service -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
+        echo "Public IP: $publicIP"
+        if [ -z "$publicIP" ]; then
+          echo "Public IP not found, retrying..."
+          exit 1  # Terminer ici si l'IP est vide
+        fi
+        echo "Public IP retrieved: $publicIP"
+        # Définir la variable publicIP pour qu'elle soit accessible dans les autres étapes
+        echo "##vso[task.setvariable variable=publicIP]$publicIP"
+
+  # Étape 4 : Mise à jour des URIs de redirection dans Azure AD
+  - task: AzureCLI@2
+    displayName: 'Update App Registration Redirect URIs'
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        echo "Updating App Registration Redirect URIs..."
+        redirectUri1="https://$(publicIP)/"
+        redirectUri2="https://$(publicIP)/signin-oidc"
+        echo "Redirect URI 1: $redirectUri1"
+        echo "Redirect URI 2: $redirectUri2"
+        az ad app update --id $(ClientID) --set web.redirectUris="[$redirectUri1, $redirectUri2]"
+        echo "Redirect URIs updated successfully."
+
+  # Étape 5 : Vérification de l'update
+  - task: AzureCLI@2
+    displayName: 'Verify Redirect URIs Update'
+    inputs:
+      azureSubscription: $(AzureSubscription)
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        echo "Verifying Redirect URIs..."
+        appInfo=$(az ad app show --id $(ClientID) --query "web.redirectUris")
+        echo "Current Redirect URIs: $appInfo"
+        if [[ "$appInfo" == *"https://$(publicIP)/"* ]] && [[ "$appInfo" == *"https://$(publicIP)/signin-oidc"* ]]; then
+          echo "URIs are correctly updated."
+        else
+          echo "Error: URIs are not updated correctly."
+          exit 1

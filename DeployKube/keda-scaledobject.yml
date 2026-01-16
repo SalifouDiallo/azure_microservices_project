@@ -1,0 +1,114 @@
+# Définition de l'authentification pour accéder au Service Bus Azure
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-trigger-auth-servicebus-worker  # Nom unique pour cette ressource TriggerAuthentication
+  namespace: default  # L'espace de noms dans lequel l'authentification sera utilisée
+spec:
+  secretTargetRef:
+    - parameter: connection  # Paramètre de connexion pour l'authentification
+      name: my-secret  # Nom du secret Kubernetes contenant les informations sensibles
+      key: AZURE_SERVICE_BUS  # Clé spécifique dans le secret Kubernetes qui contient la chaîne de connexion du Service Bus
+
+---
+# Définition de l'objet de mise à l'échelle pour le service basé sur le Service Bus Azure
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-content-scaler  # Nom de l'objet ScaledObject pour la mise à l'échelle des réplicas du service
+  namespace: default  # Espace de noms dans lequel l'objet de mise à l'échelle est déployé
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1  # Version API de l'application Kubernetes pour déployer des ressources évolutives
+    kind: Deployment  # Type de ressource à scaler, ici un déploiement de service
+    name: worker-content-deployment  # Nom du déploiement cible à mettre à l'échelle
+  minReplicaCount: 1  # Nombre minimum de réplicas qui seront maintenus
+  maxReplicaCount: 10  # Nombre maximum de réplicas qui seront autorisés à se déployer
+  triggers:
+    - type: azure-servicebus  # Type de déclencheur de mise à l'échelle, basé sur les messages dans Azure Service Bus
+      metadata:
+        queueName: contentsafetymessage  # Nom de la file de messages à surveiller dans Service Bus
+        messageCount: "1"  # Nombre de messages minimum dans la file avant de déclencher le scaling
+        namespace: sifaxrgSb  # Namespace spécifique pour l'instance du Service Bus
+        connectionFromEnv: AZURE_SERVICE_BUS  # Nom de la variable d'environnement contenant la chaîne de connexion au Service Bus
+      authenticationRef:
+        name: keda-trigger-auth-servicebus-worker  # Référence à la ressource TriggerAuthentication pour l'authentification
+
+---
+# Définition de l'authentification pour accéder à l'Event Hub Azure et au stockage Blob
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-trigger-auth-eventhub-workerdb  # Nom unique pour cette ressource TriggerAuthentication
+  namespace: default  # Espace de noms où l'authentification est utilisée
+spec:
+  secretTargetRef:
+    - parameter: connection  # Paramètre de connexion à l'Event Hub
+      name: my-secret  # Nom du secret contenant la clé d'Event Hub
+      key: AZURE_EVENT_HUB  # Clé de connexion dans le secret Kubernetes pour Event Hub
+    - parameter: storageConnection  # Paramètre de connexion pour le stockage Blob
+      name: my-secret  # Nom du secret contenant la chaîne de connexion Blob
+      key: ConnectionStringBlob  # Clé de connexion au Blob dans le secret Kubernetes
+
+---
+# Définition de l'objet de mise à l'échelle pour le service basé sur Event Hub Azure
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-db-scaler  # Nom de l'objet ScaledObject pour la mise à l'échelle des réplicas du service Event Hub
+  namespace: default  # Espace de noms où l'objet de mise à l'échelle est déployé
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1  # Version API de l'application Kubernetes pour la gestion des ressources
+    kind: Deployment  # Type de ressource à mettre à l'échelle, ici un déploiement
+    name: worker-db-deployment  # Nom du déploiement cible à mettre à l'échelle
+  minReplicaCount: 1  # Nombre minimum de réplicas
+  maxReplicaCount: 10  # Nombre maximum de réplicas autorisés
+  triggers:
+    - type: azure-eventhub  # Type de déclencheur de mise à l'échelle, basé sur les événements dans Event Hub
+      metadata:
+        eventHubNamespace: sifaxrgEventHub  # Namespace de l'Event Hub
+        eventHubName: event  # Nom spécifique de l'Event Hub à surveiller
+        consumerGroup: consumer  # Groupe de consommateurs pour Event Hub
+        blobContainer: synchro  # Container Blob pour stocker les points de contrôle des messages
+        storageConnectionFromEnv: storageConnection  # Nom de la variable d'environnement pour la chaîne de connexion Blob
+        messageCount: "1"  # Nombre de messages minimum avant de déclencher le scaling
+      authenticationRef:
+        name: keda-trigger-auth-eventhub-workerdb  # Référence à la ressource TriggerAuthentication pour l'authentification
+
+---
+# Définition de l'authentification pour accéder au Service Bus Azure pour le travail de redimensionnement d'image
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-trigger-auth-servicebus-workerimage  # Nom unique pour cette ressource TriggerAuthentication
+  namespace: default  # Espace de noms où cette ressource d'authentification est utilisée
+spec:
+  secretTargetRef:
+    - parameter: connection  # Paramètre de connexion pour l'accès au Service Bus
+      name: my-secret  # Nom du secret contenant la chaîne de connexion du Service Bus
+      key: AZURE_SERVICE_BUS  # Clé de connexion dans le secret Kubernetes
+
+---
+# Définition de l'objet de mise à l'échelle pour le service de redimensionnement d'images basé sur Azure Service Bus
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-image-scaler  # Nom de l'objet ScaledObject pour la mise à l'échelle du service de redimensionnement d'images
+  namespace: default  # Espace de noms où l'objet de mise à l'échelle est déployé
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1  # Version API de l'application Kubernetes pour la gestion des ressources
+    kind: Deployment  # Type de ressource à mettre à l'échelle, ici un déploiement d'images
+    name: worker-image-deployment  # Nom du déploiement cible pour le redimensionnement des images
+  minReplicaCount: 1  # Nombre minimum de réplicas
+  maxReplicaCount: 10  # Nombre maximum de réplicas autorisés
+  triggers:
+    - type: azure-servicebus  # Type de déclencheur de mise à l'échelle basé sur les messages dans Azure Service Bus
+      metadata:
+        queueName: imageresizemessage  # Nom de la file de messages pour le redimensionnement d'images
+        messageCount: "1"  # Nombre de messages minimum avant de déclencher le scaling
+        namespace: sifaxrgSb  # Namespace du Service Bus utilisé pour la mise à l'échelle
+        connectionFromEnv: AZURE_SERVICE_BUS  # Nom de la variable d'environnement pour récupérer la chaîne de connexion
+      authenticationRef:
+        name: keda-trigger-auth-servicebus-workerimage  # Référence à la ressource TriggerAuthentication pour l'authentification
