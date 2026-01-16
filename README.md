@@ -43,3 +43,17 @@ Chaque composant est conteneurisé et déployé sur AKS. KEDA ajuste dynamiqueme
 
 - Les journaux et métriques sont collectés via **Azure Monitor**
 - Des tests de charge sont effectués avec des outils comme **Apache JMeter** ou **k6** afin de valider les performances et la montée en charge
+
+## 📸 Déploiement réussi sur Azure
+
+### ✔️ Pipeline Azure DevOps – Exécution complète
+![Pipeline Azure DevOps réussi](images/1.png)
+
+### ✔️ Création de l’infrastructure Azure
+![Création de l’infrastructure Azure](images/2.png)
+
+### ✔️ Packaging des microservices Docker
+![Packaging des services Docker](images/3.png)
+
+### ✔️ Déploiement et autoscaling sur AKS (KEDA)
+![Workloads AKS et KEDA](images/4.png)
