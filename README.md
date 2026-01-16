@@ -1,54 +1,45 @@
-# Cloud-Ready .NET Microservices Application
+# Application de microservices .NET prête pour le cloud
 
-This project demonstrates the development, containerization, and cloud deployment of a .NET 9 microservices-based application using Azure and Kubernetes.
+Ce projet démontre le développement, la conteneurisation et le déploiement infonuagique d’une application basée sur une architecture de microservices en **.NET 9**, en utilisant **Azure** et **Kubernetes**.
 
 ## 🔧 Technologies
 
-- **.NET 9** – Microservices architecture (API, MVC, Workers)
-- **Docker** – Containerization of services
-- **Azure DevOps** – CI/CD pipelines
-- **AKS (Azure Kubernetes Service)** – Orchestration platform
-- **KEDA** – Autoscaling based on external triggers
-- **Azure Key Vault** – Secure secret management
-- **CosmosDB** – Scalable NoSQL database
-- **Azure Event Hub / Service Bus** – Event-driven architecture
-- **Azure Container Registry (ACR)** – Secure Docker image hosting
-- **Azure Monitor** – Monitoring and logging
-- **Azure App Configuration** – Centralized config management
+- **.NET 9** – Architecture microservices (API, MVC, Workers)
+- **Docker** – Conteneurisation des services
+- **Azure DevOps** – Pipelines CI/CD
+- **AKS (Azure Kubernetes Service)** – Plateforme d’orchestration
+- **KEDA** – Autoscaling basé sur des déclencheurs externes
+- **Azure Key Vault** – Gestion sécurisée des secrets
+- **CosmosDB** – Base de données NoSQL scalable
+- **Azure Event Hub / Service Bus** – Architecture orientée événements
+- **Azure Container Registry (ACR)** – Hébergement sécurisé des images Docker
+- **Azure Monitor** – Supervision et journalisation
+- **Azure App Configuration** – Gestion centralisée de la configuration
 
-## 🧩 Architecture Overview
+## 🧩 Vue d’ensemble de l’architecture
 
-The application consists of:
-- An **API Gateway** for external access
-- A **MVC Frontend** for user interaction
-- Several **Worker services** for background processing
-- All services communicate via HTTP and asynchronous messages (Event Hub / Service Bus)
+L’application se compose de :
+- Une **API Gateway** pour l’accès externe
+- Un **Frontend MVC** pour l’interaction utilisateur
+- Plusieurs **services Worker** pour le traitement en arrière-plan
+- Tous les services communiquent via HTTP et des messages asynchrones (Event Hub / Service Bus)
 
-Each component is containerized and deployed to AKS. KEDA dynamically scales the workers based on event volume.
+Chaque composant est conteneurisé et déployé sur AKS. KEDA ajuste dynamiquement le nombre de workers en fonction du volume d’événements.
 
-## 🚀 CI/CD Workflow
+## 🚀 Pipeline CI/CD
 
-Using **Azure DevOps Pipelines**:
-1. **Build** Docker images for each microservice
-2. **Push** images to **Azure Container Registry (ACR)**
-3. **Deploy** to AKS using Kubernetes manifests and Helm charts
-4. Apply autoscaling policies with KEDA
+À l’aide des **pipelines Azure DevOps** :
+1. **Construction** des images Docker pour chaque microservice
+2. **Publication** des images dans **Azure Container Registry (ACR)**
+3. **Déploiement** sur AKS à l’aide de manifestes Kubernetes et de charts Helm
+4. Application des politiques d’autoscaling avec KEDA
 
-## 🔐 Security
+## 🔐 Sécurité
 
-- Secrets (DB strings, API keys) are stored and retrieved securely from **Azure Key Vault**
-- Configuration settings are centralized using **Azure App Configuration**
+- Les secrets (chaînes de connexion, clés API) sont stockés et récupérés de manière sécurisée via **Azure Key Vault**
+- Les paramètres de configuration sont centralisés à l’aide de **Azure App Configuration**
 
-## 📈 Monitoring & Testing
+## 📈 Supervision et tests
 
-- Logs and metrics collected via **Azure Monitor**
-- Load testing conducted using tools like **Apache JMeter** or **k6** to validate scaling performance
-
-## 📸 Screenshots
-![deploy-kube-infrastructure](https://github.com/user-attachments/assets/6b9fde7e-46e5-4487-b0d7-0ab5c127d7e2)
-![create-infrastructure](https://github.com/user-attachments/assets/d2168762-ba73-4aee-82d9-b67d78166f38)
-![Build and Publish![worker-imagesclaer](https://github.com/user-attachments/assets/937a8ada-5f15-44f0-a9d4-d1e269a5e9f7)
- Docker](https://github.com/user-attachments/assets/77a1cf13-085e-42f8-b856-2f7c0348ed9f)
-![worker-content-x2](https://github.com/user-attachments/assets/ff7849f1-ee0b-4ec2-a485-e12d484bf7d4)
-
-
+- Les journaux et métriques sont collectés via **Azure Monitor**
+- Des tests de charge sont effectués avec des outils comme **Apache JMeter** ou **k6** afin de valider les performances et la montée en charge
